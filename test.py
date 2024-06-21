@@ -3,7 +3,6 @@
 # Licensed under the MIT License.
 # Created by Zhichao zhao(zhaozhichao4515@gmail.com)
 # ------------------------------------------------------------------------------
-import argparse
 import time
 
 import cv2
@@ -19,6 +18,7 @@ from dataset.datasets import WLFWDatasets
 
 from models.pfld import PFLDInference
 
+
 cudnn.benchmark = True
 cudnn.determinstic = True
 cudnn.enabled = True
@@ -26,8 +26,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def compute_nme(preds, target):
-    """ preds/target:: numpy array, shape is (N, L, 2)
-        N: batchsize L: num of landmark 
+    """ 
+    preds/target:: numpy array, shape is (N, L, 2)
+    N: batchsize L: num of landmark 
     """
     N = preds.shape[0]
     L = preds.shape[1]
@@ -48,7 +49,6 @@ def compute_nme(preds, target):
             raise ValueError('Number of landmarks is wrong')
         rmse[i] = np.sum(np.linalg.norm(pts_pred - pts_gt,
                                         axis=1)) / (interocular * L)
-
     return rmse
 
 
@@ -83,10 +83,8 @@ def validate(wlfw_val_dataloader, pfld_backbone):
             cost_time.append(time.time() - start_time)
 
             landmarks = landmarks.cpu().numpy()
-            landmarks = landmarks.reshape(landmarks.shape[0], -1,
-                                          2)  # landmark
-            landmark_gt = landmark_gt.reshape(landmark_gt.shape[0], -1,
-                                              2).cpu().numpy()  # landmark_gt
+            landmarks = landmarks.reshape(landmarks.shape[0], -1, 2)  # landmark
+            landmark_gt = landmark_gt.reshape(landmark_gt.shape[0], -1, 2).cpu().numpy()  # landmark_gt
 
             if args.show_image:
                 show_img = np.array(
@@ -101,6 +99,7 @@ def validate(wlfw_val_dataloader, pfld_backbone):
 
                 for (x, y) in pre_landmark.astype(np.int32):
                     cv2.circle(img_clone, (x, y), 1, (255, 0, 0), -1)
+
                 cv2.imshow("show_img.jpg", img_clone)
                 cv2.waitKey(0)
 
@@ -110,44 +109,36 @@ def validate(wlfw_val_dataloader, pfld_backbone):
 
         # nme
         print('nme: {:.4f}'.format(np.mean(nme_list)))
+
         # auc and failure rate
         failureThreshold = 0.1
         auc, failure_rate = compute_auc(nme_list, failureThreshold)
-        print('auc @ {:.1f} failureThreshold: {:.4f}'.format(
-            failureThreshold, auc))
+        print('AUC = {:.4f} @ threshold = {:.1f}'.format(auc, failureThreshold))
         print('failure_rate: {:}'.format(failure_rate))
+
         # inference time
         print("inference_cost_time: {0:4f}".format(np.mean(cost_time)))
 
 
-def main(args):
+if __name__ == "__main__":
+
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser(description='Testing')
+    parser.add_argument('--model_path', type=str, default="./checkpoint/snapshot/checkpoint.pth.tar")
+    parser.add_argument('--test_dataset', type=str, default='./data/test_data/list.txt')
+    parser.add_argument('--show_image', type=bool, default=True)
+    args, _ = parser.parse_known_args()
+
+    # Load model
     checkpoint = torch.load(args.model_path, map_location=device)
     pfld_backbone = PFLDInference().to(device)
     pfld_backbone.load_state_dict(checkpoint['pfld_backbone'])
 
     transform = transforms.Compose([transforms.ToTensor()])
     wlfw_val_dataset = WLFWDatasets(args.test_dataset, transform)
-    wlfw_val_dataloader = DataLoader(wlfw_val_dataset,
-                                     batch_size=1,
-                                     shuffle=False,
-                                     num_workers=0)
+    wlfw_val_dataloader = DataLoader(wlfw_val_dataset, batch_size=1, shuffle=False, num_workers=0)
 
+    # Run validation
     validate(wlfw_val_dataloader, pfld_backbone)
 
-
-def parse_args():
-    parser = argparse.ArgumentParser(description='Testing')
-    parser.add_argument('--model_path',
-                        default="./checkpoint/snapshot/checkpoint.pth.tar",
-                        type=str)
-    parser.add_argument('--test_dataset',
-                        default='./data/test_data/list.txt',
-                        type=str)
-    parser.add_argument('--show_image', default=False, type=bool)
-    args = parser.parse_args()
-    return args
-
-
-if __name__ == "__main__":
-    args = parse_args()
-    main(args)
